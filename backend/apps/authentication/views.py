@@ -29,12 +29,9 @@ def register(request):
         refresh['username'] = user.username
         
         return Response({
-            'message': 'User registered successfully',
             'user': user.to_dict(),
-            'tokens': {
-                'refresh': str(refresh),
-                'access': str(refresh.access_token),
-            }
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
         }, status=status.HTTP_201_CREATED)
     
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -44,10 +41,12 @@ def register(request):
 @permission_classes([AllowAny])
 def login(request):
     """User login"""
+    print(f"🔍 DEBUG Login request data: {request.data}")
     serializer = UserLoginSerializer(data=request.data)
     
     if serializer.is_valid():
         user = serializer.validated_data['user']
+        print(f"✅ DEBUG User found: {user.username}")
         
         # Generate JWT tokens
         refresh = RefreshToken()
@@ -55,14 +54,12 @@ def login(request):
         refresh['username'] = user.username
         
         return Response({
-            'message': 'Login successful',
             'user': user.to_dict(),
-            'tokens': {
-                'refresh': str(refresh),
-                'access': str(refresh.access_token),
-            }
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
         }, status=status.HTTP_200_OK)
     
+    print(f"❌ DEBUG Validation errors: {serializer.errors}")
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 

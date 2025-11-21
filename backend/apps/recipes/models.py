@@ -230,11 +230,13 @@ class Recipe(Document):
             }
         
         if self.nutrition:
-            data['nutrition'] = {
+            data['nutrition_info'] = {
                 'calories': self.nutrition.calories,
                 'protein': self.nutrition.protein,
                 'carbs': self.nutrition.carbs,
                 'fat': self.nutrition.fat,
+                'fiber': self.nutrition.fiber,
+                'sugar': self.nutrition.sugar,
             }
         
         return data

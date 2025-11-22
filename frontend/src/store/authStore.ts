@@ -41,7 +41,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   register: async (username: string, email: string, password: string) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await authService.register({ username, email, password });
+      const response = await authService.register({ 
+        username, 
+        email, 
+        password,
+        password_confirm: password 
+      });
       localStorage.setItem('access_token', response.access);
       localStorage.setItem('refresh_token', response.refresh);
       set({ user: response.user, isAuthenticated: true, isLoading: false });

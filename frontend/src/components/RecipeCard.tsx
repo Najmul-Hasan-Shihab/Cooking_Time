@@ -70,14 +70,14 @@ const RecipeCard = ({ recipe }: RecipeCardProps) => {
 
           {/* Tags */}
           <div className="flex flex-wrap gap-1 mb-3">
-            {recipe.tags.slice(0, 3).map((tag) => (
+            {recipe.tags && recipe.tags.length > 0 ? recipe.tags.slice(0, 3).map((tag) => (
               <span
                 key={tag}
                 className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full"
               >
                 #{tag}
               </span>
-            ))}
+            )) : null}
             {recipe.tags.length > 3 && (
               <span className="text-xs text-gray-500 px-2 py-1">
                 +{recipe.tags.length - 3} more

@@ -72,6 +72,7 @@ class Recipe(Document):
     tags = ListField(StringField(max_length=50))
     categories = ListField(StringField(max_length=50))
     cuisine = StringField(max_length=100)
+    dietary_restrictions = ListField(StringField(max_length=50))  # vegetarian, vegan, gluten-free, dairy-free, etc.
     
     # Nutrition (optional)
     nutrition = EmbeddedDocumentField(NutritionInfo)
@@ -208,6 +209,7 @@ class Recipe(Document):
             'tags': self.tags,
             'categories': self.categories,
             'cuisine': self.cuisine,
+            'dietary_restrictions': self.dietary_restrictions if self.dietary_restrictions else [],
             'rating_stats': {
                 'average': self.rating_stats.average if self.rating_stats else 0.0,
                 'count': self.rating_stats.count if self.rating_stats else 0,

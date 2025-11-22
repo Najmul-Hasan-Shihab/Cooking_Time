@@ -7,6 +7,17 @@ from mongoengine import (
 )
 from datetime import datetime
 import bcrypt
+import sys
+import os
+
+# Add the gamification app to path for importing xp_system
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from gamification.xp_system import (
+    calculate_level_from_xp, 
+    get_xp_for_next_level,
+    check_level_up,
+    get_level_name
+)
 
 
 class User(Document):
@@ -24,7 +35,7 @@ class User(Document):
     # Gamification
     xp = IntField(default=0)
     level = IntField(default=1)
-    badges = ListField(ReferenceField('Badge'))
+    badges = ListField(StringField())  # Store badge IDs as strings
     
     # Social
     followers = ListField(ReferenceField('self'))
@@ -66,22 +77,59 @@ class User(Document):
         )
     
     def calculate_level(self):
-        """Calculate user level based on XP"""
-        # Level thresholds: 0, 100, 300, 600, 1000, 1500...
-        thresholds = [0, 100, 300, 600, 1000, 1500, 2100, 2800, 3600, 4500]
-        
-        for level, threshold in enumerate(thresholds, start=1):
-            if self.xp < threshold:
-                return level - 1
-        
-        # For XP beyond thresholds, use formula
-        return 10 + ((self.xp - 4500) // 1000)
+        """Calculate user level based on XP using the new XP system"""
+        return calculate_level_from_xp(self.xp)
     
-    def add_xp(self, amount):
-        """Add XP and recalculate level"""
+    def add_xp(self, amount, action_type=None):
+        """
+        Add XP and recalculate level
+        
+        Args:
+            amount (int): XP points to add
+            action_type (str, optional): Type of action that triggered XP gain
+            
+        Returns:
+            dict: {
+                'xp_gained': int,
+                'new_xp': int,
+                'new_level': int,
+                'level_up': dict or None (if leveled up)
+            }
+        """
+        old_xp = self.xp
+        old_level = self.level
+        
         self.xp += amount
         self.level = self.calculate_level()
         self.updated_at = datetime.utcnow()
+        
+        # Check if user leveled up
+        level_up_info = check_level_up(old_xp, self.xp)
+        
+        # Send level-up notification
+        if level_up_info and self.level > old_level:
+            try:
+                from apps.gamification.notification_helpers import notify_level_up
+                notify_level_up(self, self.level)
+            except Exception as e:
+                pass  # Don't fail if notification fails
+        
+        return {
+            'xp_gained': amount,
+            'new_xp': self.xp,
+            'old_level': old_level,
+            'new_level': self.level,
+            'level_up': level_up_info,
+            'action_type': action_type
+        }
+    
+    def get_xp_progress(self):
+        """Get detailed XP progress information"""
+        return get_xp_for_next_level(self.xp)
+    
+    def get_level_title(self):
+        """Get descriptive level name"""
+        return get_level_name(self.level)
     
     @property
     def is_authenticated(self):
@@ -95,6 +143,8 @@ class User(Document):
     
     def to_dict(self):
         """Convert user to dictionary (for API responses)"""
+        xp_progress = self.get_xp_progress()
+        
         return {
             'id': str(self.id),
             'username': self.username,
@@ -103,7 +153,9 @@ class User(Document):
             'bio': self.bio,
             'xp': self.xp,
             'level': self.level,
-            'badges': [str(badge.id) for badge in self.badges] if self.badges else [],
+            'level_title': self.get_level_title(),
+            'xp_progress': xp_progress,
+            'badges': self.badges if self.badges else [],
             'followers_count': len(self.followers) if self.followers else 0,
             'following_count': len(self.following) if self.following else 0,
             'preferences': self.preferences,

@@ -1,5 +1,5 @@
 import apiClient from './api';
-import { AuthResponse, LoginRequest, RegisterRequest, User } from '../types';
+import { AuthResponse, LoginRequest, RegisterRequest, User, UpdateProfileRequest } from '../types';
 
 export const authService = {
   async register(data: RegisterRequest): Promise<AuthResponse> {
@@ -31,5 +31,10 @@ export const authService = {
       refresh: refreshToken,
     });
     return response.data.access;
+  },
+
+  async updateProfile(data: UpdateProfileRequest): Promise<User> {
+    const response = await apiClient.put<User>('/api/users/me/profile/', data);
+    return response.data;
   },
 };

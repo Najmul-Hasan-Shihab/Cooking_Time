@@ -1,16 +1,61 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { useRecipes } from '../hooks/useRecipes';
+import { recipeService } from '../services/recipes';
 import { Link } from 'react-router-dom';
 import { ChefHat, Users, BookOpen, TrendingUp, Lock, Star } from 'lucide-react';
 import RecipeCard from '../components/RecipeCard';
+import toast from 'react-hot-toast';
 
 const ProfilePage = () => {
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<'recipes' | 'cooked' | 'saved'>('recipes');
+  const [cookedRecipes, setCookedRecipes] = useState<any[]>([]);
+  const [savedRecipes, setSavedRecipes] = useState<any[]>([]);
+  const [cookedCount, setCookedCount] = useState(0);
+  const [savedCount, setSavedCount] = useState(0);
+  const [isLoadingCooked, setIsLoadingCooked] = useState(false);
+  const [isLoadingSaved, setIsLoadingSaved] = useState(false);
   
   // Fetch user's recipes (filtered by author)
-  const { data: recipesData, isLoading } = useRecipes({});
+  const { data: recipesData, isLoading } = useRecipes(user?.id ? { author: user.id } : {});
+
+  // Fetch cooked recipes
+  useEffect(() => {
+    if (user && activeTab === 'cooked') {
+      setIsLoadingCooked(true);
+      recipeService.getCookedRecipes()
+        .then(data => {
+          setCookedRecipes(data.results);
+          setCookedCount(data.count);
+        })
+        .catch(() => toast.error('Failed to load cooked recipes'))
+        .finally(() => setIsLoadingCooked(false));
+    }
+  }, [user, activeTab]);
+
+  // Fetch saved recipes
+  useEffect(() => {
+    if (user && activeTab === 'saved') {
+      setIsLoadingSaved(true);
+      recipeService.getSavedRecipes()
+        .then(data => {
+          setSavedRecipes(data.results);
+          setSavedCount(data.count);
+        })
+        .catch(() => toast.error('Failed to load saved recipes'))
+        .finally(() => setIsLoadingSaved(false));
+    }
+  }, [user, activeTab]);
+
+  // Fetch cooked count for stats
+  useEffect(() => {
+    if (user) {
+      recipeService.getCookedRecipes()
+        .then(data => setCookedCount(data.count))
+        .catch(() => {});
+    }
+  }, [user]);
 
   if (!user) {
     return (
@@ -111,7 +156,7 @@ const ProfilePage = () => {
                   <span className="text-gray-700">Recipes Created</span>
                 </div>
                 <span className="text-xl font-bold text-gray-900">
-                  {recipesData?.results?.length || 0}
+                  {recipesData?.count || 0}
                 </span>
               </div>
 
@@ -122,7 +167,7 @@ const ProfilePage = () => {
                   </div>
                   <span className="text-gray-700">Recipes Cooked</span>
                 </div>
-                <span className="text-xl font-bold text-gray-900">0</span>
+                <span className="text-xl font-bold text-gray-900">{cookedCount}</span>
               </div>
 
               <div className="flex items-center justify-between">
@@ -266,7 +311,7 @@ const ProfilePage = () => {
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                My Recipes ({recipesData?.results?.length || 0})
+                My Recipes ({recipesData?.count || 0})
               </button>
               <button
                 onClick={() => setActiveTab('cooked')}
@@ -276,7 +321,7 @@ const ProfilePage = () => {
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                Cooked (0)
+                Cooked ({cookedCount})
               </button>
               <button
                 onClick={() => setActiveTab('saved')}
@@ -286,7 +331,7 @@ const ProfilePage = () => {
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                Saved (0)
+                Saved ({savedCount})
               </button>
             </div>
           </div>
@@ -325,22 +370,50 @@ const ProfilePage = () => {
             )}
 
             {activeTab === 'cooked' && (
-              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <ChefHat className="w-8 h-8 text-gray-400" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">No recipes cooked yet</h3>
-                <p className="text-gray-600">Start cooking and mark recipes as cooked to track your progress!</p>
+              <div>
+                {isLoadingCooked ? (
+                  <div className="flex justify-center py-12">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
+                  </div>
+                ) : cookedRecipes.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {cookedRecipes.map((recipe) => (
+                      <RecipeCard key={recipe.id} recipe={recipe} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <ChefHat className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No recipes cooked yet</h3>
+                    <p className="text-gray-600">Start cooking and mark recipes as cooked to track your progress!</p>
+                  </div>
+                )}
               </div>
             )}
 
             {activeTab === 'saved' && (
-              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Star className="w-8 h-8 text-gray-400" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">No saved recipes yet</h3>
-                <p className="text-gray-600">Save your favorite recipes to easily find them later!</p>
+              <div>
+                {isLoadingSaved ? (
+                  <div className="flex justify-center py-12">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
+                  </div>
+                ) : savedRecipes.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {savedRecipes.map((recipe) => (
+                      <RecipeCard key={recipe.id} recipe={recipe} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Star className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No saved recipes yet</h3>
+                    <p className="text-gray-600">Save your favorite recipes to easily find them later!</p>
+                  </div>
+                )}
               </div>
             )}
           </div>

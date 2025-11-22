@@ -37,6 +37,15 @@ def recipe_list_create(request):
         query = {'is_published': True}
         
         # Filters
+        author_id = request.query_params.get('author')
+        if author_id:
+            try:
+                author = User.objects(id=author_id).first()
+                if author:
+                    query['author'] = author
+            except:
+                pass
+        
         tags = request.query_params.getlist('tags')
         if tags:
             query['tags__in'] = tags
@@ -49,22 +58,48 @@ def recipe_list_create(request):
         if cuisine:
             query['cuisine__icontains'] = cuisine
         
-        time_max = request.query_params.get('time_max')
-        if time_max:
-            # Filter by total time
-            recipes = Recipe.objects(**query)
-            recipes = [r for r in recipes if r.total_time <= int(time_max)]
-            
-            # Paginate
-            paginator = RecipePagination()
-            page = paginator.paginate_queryset(recipes, request)
-            serializer = RecipeListSerializer(page, many=True)
-            return paginator.get_paginated_response(serializer.data)
+        # Dietary restrictions filter
+        dietary = request.query_params.getlist('dietary_restrictions')
+        if dietary:
+            query['dietary_restrictions__all'] = dietary
         
-        # Search
+        # Rarity filter
+        rarity = request.query_params.get('rarity')
+        if rarity and rarity in ['common', 'rare', 'epic', 'legendary']:
+            query['rarity'] = rarity
+        
+        # Time range filters
+        time_min = request.query_params.get('time_min')
+        time_max = request.query_params.get('time_max')
+        
+        # Ingredient search
+        ingredient_search = request.query_params.get('ingredient')
+        
+        # Get initial recipes
+        recipes = Recipe.objects(**query)
+        
+        # Filter by time range (need to compute total_time)
+        if time_min or time_max:
+            filtered_recipes = []
+            for r in recipes:
+                total = r.total_time
+                if time_min and total < int(time_min):
+                    continue
+                if time_max and total > int(time_max):
+                    continue
+                filtered_recipes.append(r)
+            recipes = filtered_recipes
+        
+        # Filter by ingredient
+        if ingredient_search:
+            ingredient_lower = ingredient_search.lower()
+            recipes = [r for r in recipes if any(ingredient_lower in ing.name.lower() for ing in r.ingredients)]
+        
+        # Search by title
         search = request.query_params.get('q')
         if search:
-            query['title__icontains'] = search
+            search_lower = search.lower()
+            recipes = [r for r in recipes if search_lower in r.title.lower()]
         
         # Sorting
         sort_by = request.query_params.get('sort', '-created_at')
@@ -72,8 +107,21 @@ def recipe_list_create(request):
         if sort_by not in allowed_sorts:
             sort_by = '-created_at'
         
-        # Get recipes
-        recipes = Recipe.objects(**query).order_by(sort_by)
+        # Apply sorting if we filtered manually
+        if time_min or time_max or ingredient_search or search:
+            # Already have a list, sort it
+            reverse = sort_by.startswith('-')
+            sort_field = sort_by.lstrip('-')
+            
+            if sort_field == 'rating_stats.average':
+                recipes = sorted(recipes, key=lambda r: r.rating_stats.average if r.rating_stats else 0, reverse=reverse)
+            elif sort_field == 'views':
+                recipes = sorted(recipes, key=lambda r: r.views, reverse=reverse)
+            elif sort_field == 'created_at':
+                recipes = sorted(recipes, key=lambda r: r.created_at, reverse=reverse)
+        else:
+            # Use database sorting
+            recipes = recipes.order_by(sort_by)
         
         # Paginate
         paginator = RecipePagination()
@@ -256,3 +304,124 @@ def search_recipes(request):
     page = paginator.paginate_queryset(list(recipes), request)
     serializer = RecipeListSerializer(page, many=True)
     return paginator.get_paginated_response(serializer.data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def mark_cooked(request, slug):
+    """
+    Mark a recipe as cooked by the current user
+    POST /api/recipes/:slug/mark_cooked/
+    
+    Body (all optional):
+    {
+        "photo_url": "https://...",
+        "rating": 4.5,
+        "notes": "Turned out great!"
+    }
+    
+    Returns:
+    {
+        "message": "Recipe marked as cooked!",
+        "xp_result": {...},
+        "badges_earned": [...],
+        "cooked_recipe": {...}
+    }
+    """
+    try:
+        from apps.gamification.models import CookedRecipe
+        from apps.gamification.action_tracker import track_recipe_cooked
+        from apps.gamification.badge_engine import check_and_award_badges
+        
+        # Get recipe
+        recipe = Recipe.objects.get(slug=slug, is_published=True)
+        user = request.user
+        
+        # Get optional data
+        photo_url = request.data.get('photo_url')
+        rating = request.data.get('rating')
+        notes = request.data.get('notes')
+        
+        # Validate rating if provided
+        if rating is not None:
+            try:
+                rating = float(rating)
+                if rating < 1.0 or rating > 5.0:
+                    return Response({
+                        'error': 'Rating must be between 1.0 and 5.0'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            except (ValueError, TypeError):
+                return Response({
+                    'error': 'Invalid rating value'
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if user already cooked this recipe
+        existing = CookedRecipe.objects(user=user, recipe=recipe).first()
+        if existing:
+            return Response({
+                'error': 'You have already marked this recipe as cooked',
+                'cooked_at': existing.cooked_at.isoformat() if existing.cooked_at else None
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Create cooked recipe record
+        cooked_recipe = CookedRecipe(
+            user=user,
+            recipe=recipe,
+            photo_url=photo_url,
+            rating=rating,
+            notes=notes
+        )
+        cooked_recipe.save()
+        
+        # Increment cook count
+        recipe.cook_count += 1
+        recipe.save()
+        
+        # Track action and award XP
+        has_photo = bool(photo_url)
+        has_rating = rating is not None
+        action_result = track_recipe_cooked(user, recipe, has_photo=has_photo, has_rating=has_rating)
+        
+        # Check for new badges
+        badges_earned = []
+        if action_result['success']:
+            badges_earned = check_and_award_badges(user)
+        
+        # Send notification to recipe author
+        try:
+            from apps.gamification.notification_helpers import notify_recipe_cooked
+            notify_recipe_cooked(recipe.author, user, recipe)
+        except Exception as e:
+            pass  # Don't fail if notification fails
+        
+        # Update recipe rating if rating was provided
+        if rating:
+            recipe.rating_stats.count += 1
+            recipe.rating_stats.total += rating
+            recipe.rating_stats.average = recipe.rating_stats.total / recipe.rating_stats.count
+            recipe.save()
+        
+        return Response({
+            'message': 'Recipe marked as cooked!',
+            'xp_result': action_result.get('xp_result'),
+            'badges_earned': badges_earned,
+            'cooked_recipe': cooked_recipe.to_dict(),
+            'recipe': {
+                'slug': recipe.slug,
+                'title': recipe.title,
+                'cook_count': recipe.cook_count,
+                'rating_stats': {
+                    'average': recipe.rating_stats.average,
+                    'count': recipe.rating_stats.count
+                }
+            }
+        }, status=status.HTTP_201_CREATED)
+        
+    except Recipe.DoesNotExist:
+        return Response({
+            'error': 'Recipe not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

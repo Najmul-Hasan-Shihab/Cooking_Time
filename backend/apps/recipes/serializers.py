@@ -32,6 +32,7 @@ class RecipeListSerializer(serializers.Serializer):
     difficulty = serializers.ChoiceField(choices=['easy', 'medium', 'hard'])
     tags = serializers.ListField(child=serializers.CharField(), required=False)
     cuisine = serializers.CharField(required=False, allow_blank=True)
+    dietary_restrictions = serializers.ListField(child=serializers.CharField(), required=False)
     prep_time = serializers.IntegerField(required=False, allow_null=True)
     cook_time = serializers.IntegerField(required=False, allow_null=True)
     servings = serializers.IntegerField(default=1)
@@ -92,6 +93,11 @@ class RecipeCreateUpdateSerializer(serializers.Serializer):
         allow_empty=True
     )
     cuisine = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    dietary_restrictions = serializers.ListField(
+        child=serializers.CharField(max_length=50),
+        required=False,
+        allow_empty=True
+    )
     
     def validate_ingredients(self, value):
         """Validate ingredients"""

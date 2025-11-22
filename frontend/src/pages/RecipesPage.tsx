@@ -9,10 +9,15 @@ const RecipesPage = () => {
     difficulty: undefined,
     cuisine: '',
     tags: [],
+    dietary_restrictions: [],
+    rarity: undefined,
+    time_min: undefined,
     time_max: undefined,
+    ingredient: '',
     sort: '-created_at',
     page: 1,
   });
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   const { data, isLoading, error } = useRecipes(filters);
 
@@ -28,9 +33,34 @@ const RecipesPage = () => {
     setFilters({ ...filters, sort: e.target.value, page: 1 });
   };
 
+  const handleTimeMinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value ? parseInt(e.target.value) : undefined;
+    setFilters({ ...filters, time_min: value, page: 1 });
+  };
+
   const handleTimeMaxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value ? parseInt(e.target.value) : undefined;
     setFilters({ ...filters, time_max: value, page: 1 });
+  };
+
+  const handleCuisineChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFilters({ ...filters, cuisine: e.target.value, page: 1 });
+  };
+
+  const handleIngredientChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFilters({ ...filters, ingredient: e.target.value, page: 1 });
+  };
+
+  const handleDietaryChange = (dietary: string) => {
+    const current = filters.dietary_restrictions || [];
+    const updated = current.includes(dietary)
+      ? current.filter(d => d !== dietary)
+      : [...current, dietary];
+    setFilters({ ...filters, dietary_restrictions: updated, page: 1 });
+  };
+
+  const handleRarityChange = (rarity: 'common' | 'rare' | 'epic' | 'legendary' | undefined) => {
+    setFilters({ ...filters, rarity, page: 1 });
   };
 
   const handlePageChange = (newPage: number) => {
@@ -44,10 +74,15 @@ const RecipesPage = () => {
       difficulty: undefined,
       cuisine: '',
       tags: [],
+      dietary_restrictions: [],
+      rarity: undefined,
+      time_min: undefined,
       time_max: undefined,
+      ingredient: '',
       sort: '-created_at',
       page: 1,
     });
+    setShowAdvancedFilters(false);
   };
 
   return (
@@ -71,8 +106,8 @@ const RecipesPage = () => {
           />
         </div>
 
-        {/* Filters Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* Basic Filters Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
           {/* Difficulty Filter */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -122,20 +157,29 @@ const RecipesPage = () => {
             </div>
           </div>
 
-          {/* Time Filter */}
+          {/* Time Range Filter */}
           <div>
-            <label htmlFor="time" className="block text-sm font-medium text-gray-700 mb-2">
-              Max Time (min)
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Time Range (min)
             </label>
-            <input
-              id="time"
-              type="number"
-              min="0"
-              placeholder="Any"
-              value={filters.time_max || ''}
-              onChange={handleTimeMaxChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-            />
+            <div className="flex space-x-2">
+              <input
+                type="number"
+                min="0"
+                placeholder="Min"
+                value={filters.time_min || ''}
+                onChange={handleTimeMinChange}
+                className="w-1/2 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+              <input
+                type="number"
+                min="0"
+                placeholder="Max"
+                value={filters.time_max || ''}
+                onChange={handleTimeMaxChange}
+                className="w-1/2 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
           </div>
 
           {/* Sort */}
@@ -165,6 +209,132 @@ const RecipesPage = () => {
               Clear Filters
             </button>
           </div>
+        </div>
+
+        {/* Advanced Filters Toggle */}
+        <div className="border-t pt-4">
+          <button
+            onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+            className="flex items-center text-sm font-medium text-orange-600 hover:text-orange-700"
+          >
+            {showAdvancedFilters ? '▼' : '▶'} Advanced Filters
+          </button>
+
+          {/* Advanced Filters */}
+          {showAdvancedFilters && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+              {/* Rarity Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Rarity
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => handleRarityChange(undefined)}
+                    className={`px-3 py-1 text-sm rounded-md ${
+                      !filters.rarity
+                        ? 'bg-gray-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    All
+                  </button>
+                  <button
+                    onClick={() => handleRarityChange('common')}
+                    className={`px-3 py-1 text-sm rounded-md ${
+                      filters.rarity === 'common'
+                        ? 'bg-gray-500 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Common
+                  </button>
+                  <button
+                    onClick={() => handleRarityChange('rare')}
+                    className={`px-3 py-1 text-sm rounded-md ${
+                      filters.rarity === 'rare'
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Rare
+                  </button>
+                  <button
+                    onClick={() => handleRarityChange('epic')}
+                    className={`px-3 py-1 text-sm rounded-md ${
+                      filters.rarity === 'epic'
+                        ? 'bg-purple-500 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Epic
+                  </button>
+                  <button
+                    onClick={() => handleRarityChange('legendary')}
+                    className={`px-3 py-1 text-sm rounded-md ${
+                      filters.rarity === 'legendary'
+                        ? 'bg-yellow-500 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Legendary
+                  </button>
+                </div>
+              </div>
+
+              {/* Dietary Restrictions */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Dietary Restrictions
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {['vegetarian', 'vegan', 'gluten-free', 'dairy-free', 'nut-free'].map((dietary) => (
+                    <button
+                      key={dietary}
+                      onClick={() => handleDietaryChange(dietary)}
+                      className={`px-3 py-1 text-sm rounded-md ${
+                        filters.dietary_restrictions?.includes(dietary)
+                          ? 'bg-green-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {dietary}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Cuisine & Ingredient Search */}
+              <div className="space-y-2">
+                <div>
+                  <label htmlFor="cuisine" className="block text-sm font-medium text-gray-700 mb-1">
+                    Cuisine
+                  </label>
+                  <input
+                    id="cuisine"
+                    type="text"
+                    placeholder="e.g., Italian, Mexican"
+                    value={filters.cuisine || ''}
+                    onChange={handleCuisineChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="ingredient" className="block text-sm font-medium text-gray-700 mb-1">
+                    Ingredient
+                  </label>
+                  <input
+                    id="ingredient"
+                    type="text"
+                    placeholder="e.g., chicken, tomato"
+                    value={filters.ingredient || ''}
+                    onChange={handleIngredientChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

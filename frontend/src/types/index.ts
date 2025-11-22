@@ -63,6 +63,7 @@ export interface Recipe {
   tags: string[];
   categories: string[];
   cuisine: string;
+  dietary_restrictions: string[];
   nutrition_info?: NutritionInfo;
   rating_stats: RatingStats;
   views: number;
@@ -93,6 +94,7 @@ export interface RecipeListItem {
   difficulty: 'easy' | 'medium' | 'hard';
   tags: string[];
   cuisine: string;
+  dietary_restrictions: string[];
   rating_stats: RatingStats;
   views: number;
   cook_count: number;
@@ -130,6 +132,18 @@ export interface AuthResponse {
   refresh: string;
 }
 
+export interface UpdateProfileRequest {
+  username?: string;
+  email?: string;
+  bio?: string;
+  avatar_url?: string;
+  preferences?: {
+    cuisines?: string[];
+    dietary_restrictions?: string[];
+    favorite_tags?: string[];
+  };
+}
+
 export interface CreateRecipeRequest {
   title: string;
   description: string;
@@ -139,6 +153,7 @@ export interface CreateRecipeRequest {
   servings: number;
   tags: string[];
   cuisine: string;
+  dietary_restrictions?: string[];
   ingredients: Ingredient[];
   steps: RecipeStep[];
   images?: string[];
@@ -156,10 +171,15 @@ export interface Badge {
 
 export interface RecipeFilters {
   q?: string;
+  author?: string;
   tags?: string[];
   difficulty?: 'easy' | 'medium' | 'hard';
   cuisine?: string;
+  dietary_restrictions?: string[];
+  rarity?: 'common' | 'rare' | 'epic' | 'legendary';
+  time_min?: number;
   time_max?: number;
+  ingredient?: string;
   sort?: string;
   page?: number;
   page_size?: number;

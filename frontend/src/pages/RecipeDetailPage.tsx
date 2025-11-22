@@ -1,14 +1,39 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import { useRecipe } from '../hooks/useRecipes';
 import { useAuthStore } from '../store/authStore';
-import { Clock, Users, ChefHat, Star, Eye, Heart, Share2, BookmarkPlus, Award } from 'lucide-react';
+import { Clock, Users, ChefHat, Star, Eye, Heart, Share2, BookmarkPlus, Award, Send, Edit2, Trash2, ThumbsUp } from 'lucide-react';
+import { recipeService } from '../services/recipes';
+import { commentService, Comment } from '../services/comments';
 import toast from 'react-hot-toast';
 
 const RecipeDetailPage = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore();
   const { data: recipe, isLoading, error } = useRecipe(slug!);
+  const [comment, setComment] = useState('');
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [isMarkingCooked, setIsMarkingCooked] = useState(false);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [commentsCount, setCommentsCount] = useState(0);
+  const [isLoadingComments, setIsLoadingComments] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState('');
+
+  // Fetch comments
+  useEffect(() => {
+    if (slug) {
+      setIsLoadingComments(true);
+      commentService.getComments(slug)
+        .then(data => {
+          setComments(data.comments || []);
+          setCommentsCount(data.pagination?.total || 0);
+        })
+        .catch(() => toast.error('Failed to load comments'))
+        .finally(() => setIsLoadingComments(false));
+    }
+  }, [slug]);
 
   const handleMarkAsCooked = async () => {
     if (!isAuthenticated) {
@@ -16,17 +41,113 @@ const RecipeDetailPage = () => {
       navigate('/login');
       return;
     }
-    // TODO: Implement mark as cooked API call
-    toast.success('Recipe marked as cooked! 🎉 +10 XP');
+    
+    setIsMarkingCooked(true);
+    try {
+      const result = await recipeService.markAsCooked(slug!);
+      toast.success(`Recipe marked as cooked! 🎉 +${result.xp_awarded} XP`);
+      // Optionally refresh user data here
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to mark recipe as cooked');
+    } finally {
+      setIsMarkingCooked(false);
+    }
   };
 
-  const handleSaveRecipe = () => {
+  const handleSaveRecipe = async () => {
     if (!isAuthenticated) {
       toast.error('Please login to save recipes');
       navigate('/login');
       return;
     }
-    toast.success('Recipe saved to your collection! 📚');
+    
+    try {
+      const result = await recipeService.toggleSaveRecipe(slug!);
+      if (result.is_saved) {
+        toast.success('Recipe saved to your collection! 📚');
+      } else {
+        toast.success('Recipe removed from your collection');
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to save recipe');
+    }
+  };
+
+  const handleSubmitComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAuthenticated) {
+      toast.error('Please login to comment');
+      navigate('/login');
+      return;
+    }
+    
+    if (!comment.trim()) {
+      toast.error('Please enter a comment');
+      return;
+    }
+
+    setIsSubmittingComment(true);
+    try {
+      const result = await commentService.createComment(slug!, comment);
+      toast.success(`Comment posted! +${result.xp_awarded} XP 💬`);
+      setComment('');
+      // Add new comment to the list
+      setComments([result.comment, ...comments]);
+      setCommentsCount(commentsCount + 1);
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to post comment');
+    } finally {
+      setIsSubmittingComment(false);
+    }
+  };
+
+  const handleEditComment = async (commentId: string) => {
+    if (!editContent.trim()) {
+      toast.error('Comment cannot be empty');
+      return;
+    }
+
+    try {
+      const updated = await commentService.updateComment(slug!, commentId, editContent);
+      setComments(comments.map(c => c.id === commentId ? updated : c));
+      setEditingCommentId(null);
+      setEditContent('');
+      toast.success('Comment updated!');
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to update comment');
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!confirm('Are you sure you want to delete this comment?')) return;
+
+    try {
+      await commentService.deleteComment(slug!, commentId);
+      setComments(comments.filter(c => c.id !== commentId));
+      setCommentsCount(commentsCount - 1);
+      toast.success('Comment deleted');
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to delete comment');
+    }
+  };
+
+  const handleLikeComment = async (commentId: string) => {
+    if (!isAuthenticated) {
+      toast.error('Please login to like comments');
+      navigate('/login');
+      return;
+    }
+
+    try {
+      const result = await commentService.toggleLike(slug!, commentId);
+      setComments(comments.map(c => 
+        c.id === commentId 
+          ? { ...c, is_liked: result.is_liked, likes_count: result.likes_count }
+          : c
+      ));
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to like comment');
+    }
   };
 
   const handleShare = () => {
@@ -322,10 +443,11 @@ const RecipeDetailPage = () => {
             <div className="space-y-3">
               <button
                 onClick={handleMarkAsCooked}
-                className="w-full bg-orange-600 text-white py-3 px-4 rounded-lg font-semibold hover:bg-orange-700 transition flex items-center justify-center gap-2 shadow-lg shadow-orange-200"
+                disabled={isMarkingCooked}
+                className="w-full bg-orange-600 text-white py-3 px-4 rounded-lg font-semibold hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition flex items-center justify-center gap-2 shadow-lg shadow-orange-200"
               >
                 <ChefHat className="w-5 h-5" />
-                Mark as Cooked
+                {isMarkingCooked ? 'Marking...' : 'Mark as Cooked'}
               </button>
               
               <button
@@ -370,6 +492,156 @@ const RecipeDetailPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Comments Section - Full Width */}
+      <div className="mt-8">
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+              💬 Comments
+              <span className="text-sm font-normal text-gray-500">({commentsCount})</span>
+            </h2>
+
+            {/* Comment Input */}
+            {isAuthenticated ? (
+              <form onSubmit={handleSubmitComment} className="mb-8">
+                <div className="flex gap-3">
+                  <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 font-semibold flex-shrink-0">
+                    {user?.username?.charAt(0).toUpperCase() || 'U'}
+                  </div>
+                  <div className="flex-1">
+                    <textarea
+                      value={comment}
+                      onChange={(e) => setComment(e.target.value)}
+                      placeholder="Share your thoughts about this recipe..."
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none"
+                      rows={3}
+                      disabled={isSubmittingComment}
+                    />
+                    <div className="flex justify-between items-center mt-2">
+                      <span className="text-xs text-gray-500">💡 Earn +2 XP for commenting!</span>
+                      <button
+                        type="submit"
+                        disabled={isSubmittingComment || !comment.trim()}
+                        className="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition flex items-center gap-2"
+                      >
+                        <Send className="w-4 h-4" />
+                        {isSubmittingComment ? 'Posting...' : 'Post'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </form>
+            ) : (
+              <div className="mb-8 p-4 bg-gray-50 rounded-lg border border-gray-200 text-center">
+                <p className="text-gray-600">
+                  Please{' '}
+                  <button onClick={() => navigate('/login')} className="text-orange-600 hover:underline font-medium">
+                    login
+                  </button>
+                  {' '}to leave a comment
+                </p>
+              </div>
+            )}
+
+            {/* Comments List */}
+            {isLoadingComments ? (
+              <div className="flex justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+              </div>
+            ) : comments && comments.length > 0 ? (
+              <div className="space-y-4">
+                {comments.map((cmt) => (
+                  <div key={cmt.id} className="border-b border-gray-200 pb-4 last:border-0">
+                    <div className="flex gap-3">
+                      <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 font-semibold flex-shrink-0">
+                        {cmt.author.username.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-gray-900">{cmt.author.username}</span>
+                            <span className="text-xs text-gray-500">Level {cmt.author.level}</span>
+                            <span className="text-xs text-gray-400">•</span>
+                            <span className="text-xs text-gray-500">
+                              {new Date(cmt.created_at).toLocaleDateString()}
+                            </span>
+                          </div>
+                          {isAuthenticated && user?.id === cmt.author.id && (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => {
+                                  setEditingCommentId(cmt.id);
+                                  setEditContent(cmt.content);
+                                }}
+                                className="text-gray-400 hover:text-orange-600 transition"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteComment(cmt.id)}
+                                className="text-gray-400 hover:text-red-600 transition"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {editingCommentId === cmt.id ? (
+                          <div className="mt-2">
+                            <textarea
+                              value={editContent}
+                              onChange={(e) => setEditContent(e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none"
+                              rows={2}
+                            />
+                            <div className="flex gap-2 mt-2">
+                              <button
+                                onClick={() => handleEditComment(cmt.id)}
+                                className="px-3 py-1 bg-orange-600 text-white rounded text-sm hover:bg-orange-700"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingCommentId(null);
+                                  setEditContent('');
+                                }}
+                                className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-sm hover:bg-gray-300"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-gray-700">{cmt.content}</p>
+                        )}
+                        
+                        <div className="flex items-center gap-4 mt-2">
+                          <button
+                            onClick={() => handleLikeComment(cmt.id)}
+                            className={`flex items-center gap-1 text-sm transition ${
+                              cmt.is_liked 
+                                ? 'text-orange-600 font-medium' 
+                                : 'text-gray-500 hover:text-orange-600'
+                            }`}
+                          >
+                            <ThumbsUp className={`w-4 h-4 ${cmt.is_liked ? 'fill-orange-600' : ''}`} />
+                            <span>{cmt.likes_count}</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <p>No comments yet. Be the first to share your experience!</p>
+              </div>
+            )}
+          </div>
+        </div>
     </div>
   );
 };

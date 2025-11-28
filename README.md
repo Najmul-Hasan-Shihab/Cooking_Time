@@ -270,6 +270,23 @@ gunicorn config.wsgi:application --bind 0.0.0.0:8000
 docker-compose -f docker-compose.prod.yml up -d
 ```
 
+## 📸 Screenshots
+
+
+
+| Column 1 | Column 2 |
+|---------------|---------------|
+| ![Screenshot 1](./assets/ss1.png) | ![Screenshot 2](./assets/ss2.png) |
+| ![Screenshot 3](./assets/ss3.png) | ![Screenshot 4](./assets/ss4.png) | 
+| ![Screenshot 5](./assets/ss5.png) | ![Screenshot 6](./assets/ss6.png) |
+| ![Screenshot 7](./assets/ss7.png) | ![Screenshot 8](./assets/ss8.png) |
+| ![Screenshot 9](./assets/ss9.png) | ![Screenshot 10](./assets/ss10.png) |
+| ![Screenshot 11](./assets/ss11.png) | ![Screenshot 12](./assets/ss12.png) |
+| ![Screenshot 13](./assets/ss13.png) | ![Screenshot 14](./assets/ss14.png) |
+
+
+
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please follow these steps:
